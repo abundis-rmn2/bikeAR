@@ -10,6 +10,13 @@ const BikeAR = () => {
     const [indexedObjects] = useState({});
     const [firstPosition, setFirstPosition] = useState(true);
 
+    // Add after scene initialization, before GPS handler
+    const southMarkerGeometry = new THREE.SphereGeometry(10, 32, 32);
+    const southMarkerMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const southMarker = new THREE.Mesh(southMarkerGeometry, southMarkerMaterial);
+    southMarker.position.set(0, 0, 100); // 100 units south of origin
+    scene.add(southMarker);
+
     useEffect(() => {
         if (!containerRef.current) return;
 
@@ -21,14 +28,40 @@ const BikeAR = () => {
         const locar = new LocAR.LocationBased(scene, camera);
         const deviceControls = new LocAR.DeviceOrientationControls(camera);
         const cam = new LocAR.WebcamRenderer(renderer);
-        const clickHandler = new LocAR.ClickHandler(renderer);
 
         // Create bike station geometry
         const stationGeometry = new THREE.BoxGeometry(20, 20, 20);
         const stationMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); // Green for bike stations
 
+        const createTextSprite = (message) => {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 512;
+            canvas.height = 256;
+            
+            context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            
+            context.font = 'bold 36px Arial';
+            context.fillStyle = 'white';
+            context.textAlign = 'center';
+            
+            const lines = message.split('\n');
+            lines.forEach((line, i) => {
+                context.fillText(line, canvas.width/2, 50 + (i * 40));
+            });
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+            return new THREE.Sprite(spriteMaterial);
+        };
+
+        
         // Handle GPS updates and fetch bike stations
         locar.on("gpsupdate", async (pos, distMoved) => {
+            // Update south marker position relative to user
+            southMarker.position.set(0, 0, 100);
+            
             if (firstPosition || distMoved > 100) {
                 try {
                     // Fetch bike station data
@@ -45,18 +78,34 @@ const BikeAR = () => {
                         ...station,
                         ...(stationsStatus.find(s => s.station_id === station.station_id) || {})
                     }));
-
-                    // Add stations to AR scene
+                    // Modify the station creation part in the mergedStations.forEach loop
                     mergedStations.forEach(station => {
                         if (!indexedObjects[station.station_id]) {
+                            // Create station box
                             const mesh = new THREE.Mesh(stationGeometry, stationMaterial);
-                            locar.add(mesh, station.lon, station.lat, 0, {
+                            
+                            // Inside mergedStations.forEach loop, update the infoText:
+                            const infoText = `${station.name}\n${station.address}\nBikes: ${station.num_bikes_available || 0} | Docks: ${station.num_docks_available || 0}`;
+                            const textSprite = createTextSprite(infoText);
+                            textSprite.scale.set(200, 100, 1);
+                            textSprite.position.y = 50;
+
+                            
+                            // Create a group to hold both mesh and text
+                            const group = new THREE.Group();
+                            group.add(mesh);
+                            group.add(textSprite);
+                            
+                            // Add the group to the AR scene
+                            locar.add(group, station.lon, station.lat, 0, {
                                 name: station.name,
+                                address: station.address,
                                 bikes: station.num_bikes_available || 0,
                                 docks: station.num_docks_available || 0,
                                 charging: station.is_charging_station
                             });
-                            indexedObjects[station.station_id] = mesh;
+                            
+                            indexedObjects[station.station_id] = group;
                         }
                     });
 
@@ -70,23 +119,7 @@ const BikeAR = () => {
         // Start GPS tracking
         locar.startGps();
 
-        // Handle clicks on stations
-        const handleClick = () => {
-            const objects = clickHandler.raycast(camera, scene);
-            if (objects.length) {
-                const station = objects[0].object.properties;
-                alert(
-                    `Station: ${station.name}\n` +
-                    `Available Bikes: ${station.bikes}\n` +
-                    `Available Docks: ${station.docks}\n` +
-                    `Charging Station: ${station.charging ? 'Yes' : 'No'}`
-                );
-            }
-        };
-
-        document.addEventListener('click', handleClick);
-
-        // Animation loop
+        // Animation loop simplified - remove raycast check
         const animate = () => {
             cam.update();
             deviceControls.update();
@@ -106,7 +139,6 @@ const BikeAR = () => {
         // Cleanup
         return () => {
             window.removeEventListener('resize', handleResize);
-            document.removeEventListener('click', handleClick);
             containerRef.current?.removeChild(renderer.domElement);
             scene.clear();
         };
