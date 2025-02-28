@@ -1,18 +1,15 @@
 import React, { useEffect, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { fetchBikeStations } from '../utils/bikeStationService';
 
 const BikeMap = () => {
     const [map, setMap] = useState(null);
-    const [stations, setStations] = useState([]);
     const [markers, setMarkers] = useState([]);
     const [userLocation, setUserLocation] = useState(null);
-
-    const stationInfoUrl = "https://guadalajara.publicbikesystem.net/customer/ube/gbfs/v1/en/station_information";
-    const stationStatusUrl = "https://guadalajara.publicbikesystem.net/customer/ube/gbfs/v1/en/station_status";
+    const [stations, setStations] = useState([]);
 
     useEffect(() => {
-        // Intentar obtener la ubicación del usuario
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
@@ -21,12 +18,12 @@ const BikeMap = () => {
                 },
                 () => {
                     console.warn("No se pudo obtener la ubicación, usando Guadalajara.");
-                    setUserLocation({ lat: 20.67, lon: -103.35 }); // Fallback a Guadalajara
+                    setUserLocation({ lat: 20.67, lon: -103.35 });
                 }
             );
         } else {
             console.warn("Geolocalización no soportada, usando Guadalajara.");
-            setUserLocation({ lat: 20.67, lon: -103.35 }); // Fallback
+            setUserLocation({ lat: 20.67, lon: -103.35 });
         }
     }, []);
 
@@ -42,7 +39,6 @@ const BikeMap = () => {
 
         setMap(mapInstance);
 
-        // Agregar un marcador para la ubicación del usuario
         new maplibregl.Marker({ color: "blue" })
             .setLngLat([userLocation.lon, userLocation.lat])
             .setPopup(new maplibregl.Popup().setText("Tu ubicación"))
@@ -56,25 +52,11 @@ const BikeMap = () => {
 
         const fetchStations = async () => {
             try {
-                const [infoRes, statusRes] = await Promise.all([
-                    fetch(stationInfoUrl).then(res => res.json()),
-                    fetch(stationStatusUrl).then(res => res.json())
-                ]);
-
-                const stationsInfo = infoRes.data.stations;
-                const stationsStatus = statusRes.data.stations;
-
-                const mergedStations = stationsInfo.map(station => ({
-                    ...station,
-                    ...(stationsStatus.find(s => s.station_id === station.station_id) || {})
-                }));
-
+                const mergedStations = await fetchBikeStations();
                 setStations(mergedStations);
 
-                // Eliminar marcadores previos
                 markers.forEach(marker => marker.remove());
 
-                // Crear nuevos marcadores
                 const newMarkers = mergedStations.map(station => 
                     new maplibregl.Marker()
                         .setLngLat([station.lon, station.lat])
@@ -88,6 +70,27 @@ const BikeMap = () => {
                 );
 
                 setMarkers(newMarkers);
+
+                // Calculate distances and show tooltips for the closest 10 markers
+                const distances = mergedStations.map(station => ({
+                    ...station,
+                    distance: Math.sqrt(
+                        Math.pow(station.lat - userLocation.lat, 2) +
+                        Math.pow(station.lon - userLocation.lon, 2)
+                    )
+                }));
+
+                distances.sort((a, b) => a.distance - b.distance);
+
+                distances.slice(0, 2).forEach(station => {
+                    const marker = newMarkers.find(marker => {
+                        const lngLat = marker.getLngLat();
+                        return lngLat.lat === station.lat && lngLat.lng === station.lon;
+                    });
+                    if (marker) {
+                        marker.togglePopup();
+                    }
+                });
             } catch (error) {
                 console.error("Error al cargar datos:", error);
             }
@@ -97,9 +100,20 @@ const BikeMap = () => {
         const interval = setInterval(fetchStations, 10000);
 
         return () => clearInterval(interval);
-    }, [map]);
+    }, [map, userLocation]);
 
-    return <div id="map" style={{ width: "100%", height: "500px" }} />;
+    return (
+        <>
+            <div id="map" style={{ width: "100vw", height: "100vh" }} />
+            <style>
+                {`
+                    .maplibregl-popup-content {
+                        color: black;
+                    }
+                `}
+            </style>
+        </>
+    );
 };
 
 export default BikeMap;

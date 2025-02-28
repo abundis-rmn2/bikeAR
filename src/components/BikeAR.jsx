@@ -36,13 +36,13 @@ const BikeAR = () => {
         const createTextSprite = (message) => {
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
-            canvas.width = 512;
-            canvas.height = 256;
+            canvas.width = 500;
+            canvas.height = 200;
             
             context.fillStyle = 'rgba(0, 0, 0, 0.7)';
             context.fillRect(0, 0, canvas.width, canvas.height);
             
-            context.font = 'bold 36px Arial';
+            context.font = 'bold 30px Arial';
             context.fillStyle = 'white';
             context.textAlign = 'center';
             
@@ -78,16 +78,21 @@ const BikeAR = () => {
                         ...station,
                         ...(stationsStatus.find(s => s.station_id === station.station_id) || {})
                     }));
+
                     // Modify the station creation part in the mergedStations.forEach loop
                     mergedStations.forEach(station => {
                         if (!indexedObjects[station.station_id]) {
+
+                            const stationID = station.name.match(/\(([^)]+)\)/)[1];
+                            const stationAddress = station.name.split(') ')[1];
+
                             // Create station box
                             const mesh = new THREE.Mesh(stationGeometry, stationMaterial);
                             
                             // Inside mergedStations.forEach loop, update the infoText:
-                            const infoText = `${station.name}\n${station.address}\nBikes: ${station.num_bikes_available || 0} | Docks: ${station.num_docks_available || 0}`;
+                            const infoText = `${stationID}\n${stationAddress}\nBikes: ${station.num_bikes_available || 0} | Docks: ${station.num_docks_available || 0}`;
                             const textSprite = createTextSprite(infoText);
-                            textSprite.scale.set(200, 100, 1);
+                            textSprite.scale.set(50, 20, 1);
                             textSprite.position.y = 50;
 
                             
@@ -99,10 +104,8 @@ const BikeAR = () => {
                             // Add the group to the AR scene
                             locar.add(group, station.lon, station.lat, 0, {
                                 name: station.name,
-                                address: station.address,
                                 bikes: station.num_bikes_available || 0,
                                 docks: station.num_docks_available || 0,
-                                charging: station.is_charging_station
                             });
                             
                             indexedObjects[station.station_id] = group;
