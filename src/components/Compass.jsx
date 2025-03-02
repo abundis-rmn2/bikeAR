@@ -2,23 +2,6 @@ import React, { useState, useEffect } from "react";
 
 const Compass = () => {
     const [heading, setHeading] = useState(0);
-    const [permissionGranted, setPermissionGranted] = useState(false);
-
-    const requestPermission = async () => {
-        if (
-            typeof DeviceOrientationEvent !== "undefined" &&
-            typeof DeviceOrientationEvent.requestPermission === "function"
-        ) {
-            const permission = await DeviceOrientationEvent.requestPermission();
-            if (permission === "granted") {
-                setPermissionGranted(true);
-                startListening();
-            }
-        } else {
-            setPermissionGranted(true);
-            startListening();
-        }
-    };
 
     const startListening = () => {
         window.addEventListener("deviceorientation", (event) => {
@@ -44,20 +27,12 @@ const Compass = () => {
     };
 
     useEffect(() => {
-        if (permissionGranted) {
             startListening();
-        }
-    }, [permissionGranted]);
+        
+    }, []);
 
     return (
         <div className="compass" style={{position:"fixed", top:70, right: 60, zIndex: 999999}} >
-            {!permissionGranted && (
-                <button onClick={requestPermission} style={{ padding: "10px", fontSize: "16px" }}>
-                    Enable Compass 🧭
-                </button>
-            )}
-
-            {permissionGranted && (
                 <>
                     <h1>🧭 Compass</h1>
                     <h2>Direction: {Math.round(heading)}°</h2>
@@ -91,7 +66,6 @@ const Compass = () => {
                         ></div>
                     </div>
                 </>
-            )}
         </div>
     );
 };
